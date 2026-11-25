@@ -1,8 +1,10 @@
--- Baganator Refresh Button v0.5.0 -- WoW Forever
+-- Baganator Refresh Button v0.6.0 -- WoW Forever
 -- Manual in-place Categories view refresh.  No changes to inventory slots.
 
-local VERSION = "0.5.0"
+local VERSION = "0.6.0"
 local ICON_PATH = "Interface\\AddOns\\BaganatorRefreshButton\\Assets\\Refresh.tga"
+local HOVER_PATH = "Interface\\AddOns\\BaganatorRefreshButton\\Assets\\RefreshHover.tga"
+local PUSHED_PATH = "Interface\\AddOns\\BaganatorRefreshButton\\Assets\\RefreshPushed.tga"
 
 BINDING_HEADER_BAGANATOR_REFRESH_BUTTON = "Baganator Refresh Button"
 BINDING_NAME_BAGANATOR_REFRESH_BUTTON_REFRESH = "Refresh Baganator Categories"
@@ -98,32 +100,15 @@ local function CreateButton()
     button:EnableMouse(true)
     button:Hide()
 
-    -- Visible border even if a custom texture fails to load.
-    local bg = button:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints(button)
-    bg:SetColorTexture(0.13, 0.13, 0.13, 0.95)
-    local function Edge(point1, point2, size, horizontal)
-        local t = button:CreateTexture(nil, "BORDER")
-        t:SetColorTexture(0.65, 0.65, 0.65, 0.95)
-        t:SetPoint(point1, button, point1)
-        t:SetPoint(point2, button, point2)
-        if horizontal then t:SetHeight(size) else t:SetWidth(size) end
-    end
-    Edge("TOPLEFT", "TOPRIGHT", 1, true)
-    Edge("BOTTOMLEFT", "BOTTOMRIGHT", 1, true)
-    Edge("TOPLEFT", "BOTTOMLEFT", 1, false)
-    Edge("TOPRIGHT", "BOTTOMRIGHT", 1, false)
-
-    local artwork = button:CreateTexture(nil, "ARTWORK")
-    artwork:SetTexture(ICON_PATH)
-    artwork:SetPoint("CENTER", button, "CENTER", 0, 0)
-    artwork:SetSize(20, 20)
-    artwork:SetVertexColor(1, 1, 1, 1)
-    button.Icon = artwork
-
-    local hover = button:CreateTexture(nil, "HIGHLIGHT")
-    hover:SetAllPoints(button)
-    hover:SetColorTexture(1, 1, 1, 0.16)
+    -- Classic Baganator header theme: warm metal bevel, oxblood inset,
+    -- gold refresh glyph.  Normal, hover and pressed artwork share a silhouette.
+    -- These textures replace the debug border used in v0.5; this is purely visual.
+    button:SetNormalTexture(ICON_PATH)
+    button:GetNormalTexture():SetAllPoints(button)
+    button:SetHighlightTexture(HOVER_PATH)
+    button:GetHighlightTexture():SetAllPoints(button)
+    button:SetPushedTexture(PUSHED_PATH)
+    button:GetPushedTexture():SetAllPoints(button)
 
     button:SetScript("OnClick", BaganatorRefreshButton_Refresh)
     button:SetScript("OnEnter", function(self)

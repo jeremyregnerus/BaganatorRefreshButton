@@ -1,28 +1,24 @@
-Baganator Refresh Button v0.5.0 — WoW Forever
+Baganator Refresh Button v0.6.0 — WoW Forever
 ============================================
 
-Changes from v0.4.0
-- Keeps the working in-place Categories refresh and keybinding unchanged.
-- Positions Refresh beside Backpack Sort, moving to the left of Transfer or
-  other small header buttons when they occupy the space immediately left of Sort.
-- Includes a bank-open fallback for context buttons not registered in the skin API.
-- /bgrdebug reports the active positioning target and bank fallback status.
-- /bgrtest is a visual test: run once to show the button at screen center,
-  and again to return it to the backpack header. It is OFF at every login.
+Appearance update from v0.5.0
+- Restyles Refresh to match the default classic Baganator header: a dark
+  oxblood-red inset, metallic bevel and golden circular refresh glyph.
+- Adds custom hover and pressed textures, with clearer click feedback.
+- Keeps the same 24x24 size, working header positioning, bank Transfer
+  avoidance, manual refresh API, slash commands and keybinding.
+- Artwork is self-contained (TGA) and does not depend on another addon skin.
 
 Install
-1. Exit WoW completely.
-2. Delete the old AddOns/BaganatorRefreshButton folder.
-3. Extract this ZIP into _forever_/Interface/AddOns/.
-4. Restart WoW, and open Categories view.
+1. Quit WoW completely.
+2. Replace the entire AddOns/BaganatorRefreshButton folder with this version.
+3. Launch WoW and open Categories view.
 
 Controls
-- Click the Refresh icon to clear empty placeholders without sorting items.
-- Assign a shortcut in Options > Keybindings > AddOns.
-- /bgrr or /bgrrefresh: refresh categories
-- /bgrdebug: location and visibility diagnostics
-- /bgrtest: toggle center-screen visibility test
+- Click Refresh to clear empty category placeholders without sorting items.
+- Assign a key in Options > Keybindings > AddOns.
+- /bgrr or /bgrrefresh: refresh Categories
+- /bgrdebug: location/visibility diagnostics
+- /bgrtest: temporarily position Refresh in the screen center for testing
 
-Note: The button placement is based on live client diagnostics and has not
-been verified in the Forever client itself. If there is still an overlap,
-run /bgrdebug while the backpack and bank are both open.
+The change in v0.6 is visual only; it has not been game-tested.
