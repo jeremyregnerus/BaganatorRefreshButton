@@ -1,27 +1,26 @@
-Baganator Refresh Button v0.7.0 — WoW Forever
+Baganator Refresh Button v0.8.0 — WoW Forever
 ================================================
 
-Visual-only refinements from v0.6.0:
-- Refresh adopts Baganator's actual Sort button width AND height at runtime.
-  No hard-coded square icon button: wide/short Baganator skins stay wide/short.
-- A nine-slice border has a subtle grey textured metallic finish, replacing the
-  thicker warm-metal square outline from v0.6.
-- Gold circular-arrow glyph has the exact look/colors of v0.6 but is rendered
-  separately, remaining circular when the button changes shape.
-- Original dark oxblood panel and hover/click response remain.
-- No changes to working category refresh, slash commands, keybinding, header
-  placement, bank Transfer avoidance, or debug/test commands.
+Visual styling update from v0.7.0:
+- Uses BaganatorTooltipIconButtonTemplate, the same XML template inherited
+  by Baganator's Sort button. Inherits the actual border, panel, highlight
+  and pushed textures, no handmade substitutes.
+- Registers as an IconButton with Baganator's active skin (when available).
+- Reads both the actual Sort button size and the Sort icon size at runtime.
+- Keeps the transparent gold refresh-arrow artwork you liked.
+- Does NOT change the working manual refresh command, keybinding, positioning,
+  bank Transfer-button avoidance, diagnostic commands, or test-mode behavior.
 
 Install:
-1. Close World of Warcraft completely.
-2. Replace AddOns/BaganatorRefreshButton with the folder in this ZIP.
-3. Relaunch, open your bag, test near Sort, then open bank.
+1. Exit WoW completely.
+2. Replace Interface/AddOns/BaganatorRefreshButton with the folder in this ZIP.
+3. Restart and compare Refresh directly beside Sort.
 
 Commands:
- /bgrrefresh  /bgrr   manual Categories refresh
- /bgrdebug            report Sort/Refresh geometry
- /bgrtest             toggle centered test button
+/bgrrefresh or /bgrr: refresh categories in place
+/bgrdebug: show position and size info
+/bgrtest: toggle centered button positioning for diagnosis
 
-Note: Visual proportions are pulled from your live Sort control; the gray
-texture is a handcrafted approximation of the default Baganator header border.
-This build has not been visually verified in your client.
+Requires Baganator. This has not been tested within the Forever client.
+If your active Baganator skin customizes the Sort button differently from
+its standard IconButton style, a screenshot will help identify that difference.

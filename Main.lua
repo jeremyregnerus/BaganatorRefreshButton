@@ -1,11 +1,8 @@
--- Baganator Refresh Button v0.7.0 -- WoW Forever
+-- Baganator Refresh Button v0.8.0 -- WoW Forever
 -- Manual in-place Categories view refresh.  No changes to inventory slots.
 
-local VERSION = "0.7.0"
-local ASSET_ROOT = "Interface\\AddOns\\BaganatorRefreshButton\\Assets\\"
-local GLYPH_PATH  = ASSET_ROOT .. "RefreshGlyph.tga"
-local PANEL_PATH  = ASSET_ROOT .. "RefreshPanel.tga"
-local BORDER_PATH = ASSET_ROOT .. "RefreshBorder.tga"
+local VERSION = "0.8.0"
+local GLYPH_PATH = "Interface\\AddOns\\BaganatorRefreshButton\\Assets\\RefreshGlyph.tga"
 
 BINDING_HEADER_BAGANATOR_REFRESH_BUTTON = "Baganator Refresh Button"
 BINDING_NAME_BAGANATOR_REFRESH_BUTTON_REFRESH = "Refresh Baganator Categories"
@@ -91,102 +88,69 @@ local function ChooseSort()
     return best
 end
 
--- Build a nine-slice iron border around Baganator's exact button dimensions.
--- The gray textured metal stays crisp on wide/short buttons; the gold arrow
--- remains square and never stretches with the button.
-local borderParts = {}
-local panelTexture
+-- Use the exact same Baganator XML template as its own Sort button.
+-- The inherited UIPanelButtonTemplate owns the full normal/pushed/highlight
+-- styling, including the grey textured Blizzard border. We only supply a
+-- transparent, gold refresh symbol as the Icon artwork.
 local glyphTexture
-local BORDER_COORDS = { 0, 24 / 128, 104 / 128, 1 }
-
-local function CreateBorderPiece(parent, column, row)
-    local texture = parent:CreateTexture(nil, "ARTWORK")
-    texture:SetTexture(BORDER_PATH)
-    texture:SetTexCoord(
-        BORDER_COORDS[column], BORDER_COORDS[column+1],
-        BORDER_COORDS[row], BORDER_COORDS[row+1]
-    )
-    borderParts[(row-1)*3+column] = texture
-    return texture
-end
 
 local function ApplyButtonDimensions(sort)
     if not button or not sort then return false end
     local width, height = sort:GetSize()
     if not width or not height or width < 11 or height < 11 then return false end
-    if math.abs(width-button:GetWidth()) < 0.1 and math.abs(height-button:GetHeight()) < 0.1 then
-        return false
-    end
-    button:SetSize(width,height)
-    local cap = math.min(4.5,height/4,width/5)
-    local innerWidth = math.max(0,width-2*cap)
-    local innerHeight = math.max(0,height-2*cap)
-    local colSizes = {cap,innerWidth,cap}
-    local rowSizes = {cap,innerHeight,cap}
-    for r=1,3 do
-        for c=1,3 do
-            local tex = borderParts[(r-1)*3+c]
-            tex:ClearAllPoints()
-            tex:SetSize(colSizes[c],rowSizes[r])
-            local x = (c==1) and 0 or ((c==2) and cap or cap+innerWidth)
-            local y = (r==1) and 0 or ((r==2) and cap or cap+innerHeight)
-            tex:SetPoint("TOPLEFT",button,"TOPLEFT",x,-y)
+
+    local changed = math.abs(width - button:GetWidth()) > 0.1
+        or math.abs(height - button:GetHeight()) > 0.1
+    if changed then button:SetSize(width, height) end
+
+    -- Match the dimensions of Baganator's own Sort glyph too, not a percentage
+    -- of the surrounding rectangular button. The gold refresh icon stays square.
+    local iconWidth, iconHeight = 17, 17
+    if sort.Icon and sort.Icon.GetSize then
+        local sw, sh = sort.Icon:GetSize()
+        if sw and sh and sw > 1 and sh > 1 then
+            iconWidth, iconHeight = sw, sh
         end
     end
-    -- Keep the icon proportional: shape is intentionally a circle even if
-    -- the surrounding header button is a rectangle.
-    local iconSize = math.max(9,math.min(height*0.73,width-6))
-    glyphTexture:SetSize(iconSize,iconSize)
-    return true
+    local side = math.min(iconWidth, iconHeight, width - 4, height - 2)
+    side = math.max(8, side)
+    glyphTexture:SetSize(side, side)
+    return changed
 end
 
 local function CreateButton()
     if button then return end
-    button = CreateFrame("Button", "BaganatorRefreshCompanionButton", UIParent)
-    button:SetSize(0,0) -- the next header update adopts native Sort dimensions
+
+    -- This is the exact template inherited by BaganatorSortButtonTemplate.
+    -- Unlike our former handmade panel, it uses the very same border,
+    -- normal, pushed and hover textures as the adjacent native controls.
+    button = CreateFrame("Button", "BaganatorRefreshCompanionButton", UIParent,
+        "BaganatorTooltipIconButtonTemplate")
     button:SetFrameStrata("FULLSCREEN_DIALOG")
     button:SetFrameLevel(100)
     button:RegisterForClicks("LeftButtonUp")
     button:EnableMouse(true)
     button:Hide()
+    button.tooltipHeader = "Refresh Categories"
+    button.tooltipText = "Clear empty placeholders without closing bags or sorting items."
 
-    panelTexture = button:CreateTexture(nil,"BACKGROUND")
-    panelTexture:SetTexture(PANEL_PATH)
-    panelTexture:SetPoint("TOPLEFT",button,"TOPLEFT",3,-3)
-    panelTexture:SetPoint("BOTTOMRIGHT",button,"BOTTOMRIGHT",-3,3)
-
-    for r=1,3 do
-        for c=1,3 do
-            CreateBorderPiece(button,c,r)
-        end
-    end
-
-    glyphTexture = button:CreateTexture(nil,"OVERLAY")
+    glyphTexture = button:CreateTexture(nil, "OVERLAY", nil, 1)
     glyphTexture:SetTexture(GLYPH_PATH)
-    glyphTexture:SetPoint("CENTER",button,"CENTER",0,0)
+    glyphTexture:SetSize(17, 17)
+    glyphTexture:SetPoint("CENTER", button, "CENTER", 0, 0)
+    button.Icon = glyphTexture
 
-    -- Native-looking hover/pressed feedback without recoloring the glyph.
-    local hover = button:CreateTexture(nil,"HIGHLIGHT")
-    hover:SetColorTexture(1,0.80,0.4,0.12)
-    hover:SetPoint("TOPLEFT",button,"TOPLEFT",4,-3)
-    hover:SetPoint("BOTTOMRIGHT",button,"BOTTOMRIGHT",-4,3)
-    button:SetScript("OnMouseDown", function(self)
-        if panelTexture then panelTexture:SetVertexColor(0.75,0.75,0.75) end
-        if glyphTexture then glyphTexture:SetPoint("CENTER",self,"CENTER",0,-1) end
-    end)
-    button:SetScript("OnMouseUp", function(self)
-        if panelTexture then panelTexture:SetVertexColor(1,1,1) end
-        if glyphTexture then glyphTexture:SetPoint("CENTER",self,"CENTER",0,0) end
-    end)
-    button:SetScript("OnHide", function(self)
-        if panelTexture then panelTexture:SetVertexColor(1,1,1) end
-    end)
+    -- Let Baganator's selected skin treat Refresh as a regular IconButton.
+    -- This is also what its own Sort and Transfer buttons register as.
+    if Baganator and Baganator.Skins and type(Baganator.Skins.AddFrame) == "function" then
+        Baganator.Skins.AddFrame("IconButton", button, {"refresh"})
+    end
 
     button:SetScript("OnClick", BaganatorRefreshButton_Refresh)
     button:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self,"ANCHOR_RIGHT")
-        GameTooltip:SetText("Refresh Categories")
-        GameTooltip:AddLine("Clear empty placeholders without closing bags or sorting items.",1,1,1,true)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(self.tooltipHeader)
+        GameTooltip:AddLine(self.tooltipText, 1, 1, 1, true)
         GameTooltip:Show()
     end)
     button:SetScript("OnLeave", function() GameTooltip:Hide() end)
