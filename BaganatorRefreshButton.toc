@@ -2,7 +2,7 @@
 ## Title: Baganator |cFF94D7FFRefresh Button|r
 ## Notes: Manual Categories view refresh button and keybinding for WoW Forever.
 ## Author: Custom companion addon
-## Version: 0.4.0
+## Version: 0.5.0
 ## Dependencies: Baganator
 
 Main.lua
