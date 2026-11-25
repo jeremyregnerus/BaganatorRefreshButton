@@ -1,26 +1,34 @@
-Baganator Refresh Button v0.8.0 — WoW Forever
+Baganator Refresh Button v0.9.1 — WoW Forever
 ================================================
 
-Visual styling update from v0.7.0:
-- Uses BaganatorTooltipIconButtonTemplate, the same XML template inherited
-  by Baganator's Sort button. Inherits the actual border, panel, highlight
-  and pushed textures, no handmade substitutes.
-- Registers as an IconButton with Baganator's active skin (when available).
-- Reads both the actual Sort button size and the Sort icon size at runtime.
-- Keeps the transparent gold refresh-arrow artwork you liked.
-- Does NOT change the working manual refresh command, keybinding, positioning,
-  bank Transfer-button avoidance, diagnostic commands, or test-mode behavior.
+Retains the working v0.9.0 design with a keybinding label adjustment:
+- Uses Baganator's exact native button template and the same gold refresh glyph.
+- Detects the actual space between native Baganator header controls and matches
+  that gap for Refresh. Defaults to 2 UI units if no neighbors are available.
+- Optional /bgrgap N (0 to 10) persists a manual gap if necessary; /bgrgap auto
+  returns to automatic detection.
+- Moves the binding from the generic AddOns group to its own named category:
+  "Baganator Refresh Button" with action "Refresh".
+- Keeps the old binding action ID, so your chosen key is preserved.
+- Preserves bank Transfer-button avoidance, slash commands, and in-place refresh.
 
 Install:
 1. Exit WoW completely.
 2. Replace Interface/AddOns/BaganatorRefreshButton with the folder in this ZIP.
-3. Restart and compare Refresh directly beside Sort.
+3. Restart WoW.
 
 Commands:
-/bgrrefresh or /bgrr: refresh categories in place
-/bgrdebug: show position and size info
-/bgrtest: toggle centered button positioning for diagnosis
+/bgrrefresh or /bgrr: refresh Categories in place
+/bgrgap auto: use native header-gap measurement (default)
+/bgrgap 2: manually set button spacing to 2 UI units
+/bgrdebug: show placement details, including gap
+/bgrtest: toggle centered visibility test
 
-Requires Baganator. This has not been tested within the Forever client.
-If your active Baganator skin customizes the Sort button differently from
-its standard IconButton style, a screenshot will help identify that difference.
+Binding: Options > Keybindings > Baganator Refresh Button > Refresh
+
+Why a separate binding category?
+The modern WoW bindings interface does not reliably support merging actions into
+another addon's existing subsection using the old XML header field. This keeps
+Baganator untouched and avoids relying on its implementation details.
+
+Requires Baganator. The native UI integration is not in-game verified on Forever.

@@ -1,5 +1,5 @@
 <Bindings>
-    <Binding name="BAGANATOR_REFRESH_BUTTON_REFRESH" category="ADDONS" header="BAGANATOR_REFRESH_BUTTON">
+    <Binding name="BAGANATOR_REFRESH_BUTTON_REFRESH" category="Baganator Refresh Button" header="BAGANATOR_REFRESH_BUTTON">
         BaganatorRefreshButton_Refresh()
     </Binding>
 </Bindings>

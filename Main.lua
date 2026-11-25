@@ -1,11 +1,11 @@
--- Baganator Refresh Button v0.8.0 -- WoW Forever
+-- Baganator Refresh Button v0.9.1 -- WoW Forever
 -- Manual in-place Categories view refresh.  No changes to inventory slots.
 
-local VERSION = "0.8.0"
+local VERSION = "0.9.1"
 local GLYPH_PATH = "Interface\\AddOns\\BaganatorRefreshButton\\Assets\\RefreshGlyph.tga"
 
 BINDING_HEADER_BAGANATOR_REFRESH_BUTTON = "Baganator Refresh Button"
-BINDING_NAME_BAGANATOR_REFRESH_BUTTON_REFRESH = "Refresh Baganator Categories"
+BINDING_NAME_BAGANATOR_REFRESH_BUTTON_REFRESH = "Refresh"
 
 -- This is the exact event/flags confirmed working by the user.
 function BaganatorRefreshButton_Refresh()
@@ -30,6 +30,8 @@ local button
 local selectedSort
 local lastAnchor
 local lastReserve
+local lastPadding
+local observedNativePadding
 local testMode = false
 local initialized = false
 
@@ -212,11 +214,33 @@ local function HeaderNeighbors(sort)
     return list
 end
 
+-- Derive the gap from Baganator's own adjoining header controls whenever
+-- possible, instead of reproducing an approximate fixed offset.
+-- Keep a conservative 2-unit fallback when there is no visible neighbor.
+local function HeaderPadding(sort, neighbors)
+    local sortLeft = sort:GetLeft()
+    if sortLeft then
+        local best
+        for _, other in ipairs(neighbors) do
+            local gap = sortLeft - other.right
+            if gap >= 0 and gap <= 10 and (not best or gap < best) then
+                best = gap
+            end
+        end
+        if best then observedNativePadding = best end
+    end
+    if BaganatorRefreshButtonDB and type(BaganatorRefreshButtonDB.gap) == "number" then
+        return BaganatorRefreshButtonDB.gap
+    end
+    return observedNativePadding or 2
+end
+
 local function UpdatePosition()
     if not button then return end
     if testMode then
         selectedSort = nil
         lastAnchor = nil
+        lastPadding = nil
         button:ClearAllPoints()
         button:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
         anchorName = "center test"
@@ -228,6 +252,7 @@ local function UpdatePosition()
     if not sort then
         selectedSort = nil
         lastAnchor = nil
+        lastPadding = nil
         button:Hide()
         anchorName = "none"
         return
@@ -247,7 +272,7 @@ local function UpdatePosition()
     local sortLeft = sort:GetLeft()
     local targetLeft = sortLeft
     local buttonWidth = button:GetWidth()
-    local padding = 3
+    local padding = HeaderPadding(sort, neighbors)
 
     -- Find a spot that does not collide with the adjacent Transfer or any
     -- other small visible header controls. Repeat for multiple adjacent icons.
@@ -283,10 +308,11 @@ local function UpdatePosition()
 
     -- Only re-anchor when the context changes; the relative anchor will move
     -- automatically when Baganator moves the window.
-    if selectedSort ~= sort or lastAnchor ~= target or lastReserve ~= bankReserve then
+    if selectedSort ~= sort or lastAnchor ~= target or lastReserve ~= bankReserve or lastPadding ~= padding then
         selectedSort = sort
         lastAnchor = target
         lastReserve = bankReserve
+        lastPadding = padding
         button:ClearAllPoints()
         if bankReserve then
             button:SetPoint("RIGHT", sort, "LEFT", -(padding + buttonWidth + padding), 0)
@@ -358,10 +384,33 @@ SlashCmdList.BAGANATORREFRESHDEBUG = function()
             tostring(button:IsShown()), tostring(button:IsVisible()),
             x and string.format("%.0f", x) or "nil", y and string.format("%.0f", y) or "nil",
             button:GetFrameStrata(), button:GetFrameLevel(), tostring(selectedSort ~= nil)))
-        print(string.format("  Anchor=%s; nearby header buttons=%d; bank fallback=%s; size=%.1fx%.1f", anchorName, nearbyCount, tostring(bankReserve), button:GetWidth(), button:GetHeight()))
+        print(string.format("  Anchor=%s; nearby header buttons=%d; bank fallback=%s; size=%.1fx%.1f; gap=%.2f", anchorName, nearbyCount, tostring(bankReserve), button:GetWidth(), button:GetHeight(), lastPadding or 0))
     else
         print("Refresh frame: not created (skin API not initialized)")
     end
+end
+
+-- Optional fine tuning: /bgrgap auto or /bgrgap <0..10>.
+-- Only changes spacing, never physical bag contents or the refresh handler.
+SLASH_BAGANATORREFRESHGAP1 = "/bgrgap"
+SlashCmdList.BAGANATORREFRESHGAP = function(text)
+    local arg = (text or ""):lower():match("^%s*(.-)%s*$")
+    if arg == "auto" then
+        if not BaganatorRefreshButtonDB then BaganatorRefreshButtonDB = {} end
+        BaganatorRefreshButtonDB.gap = nil
+        observedNativePadding = nil
+    else
+        local number = tonumber(arg)
+        if not number or number < 0 or number > 10 then
+            print("|cff94D7FFBaganator Refresh Button|r: /bgrgap auto or /bgrgap 0-10")
+            return
+        end
+        if not BaganatorRefreshButtonDB then BaganatorRefreshButtonDB = {} end
+        BaganatorRefreshButtonDB.gap = number
+    end
+    selectedSort, lastAnchor, lastPadding = nil, nil, nil
+    UpdatePosition()
+    print("|cff94D7FFBaganator Refresh Button|r: header gap " .. tostring(lastPadding or "auto") .. " (" .. (BaganatorRefreshButtonDB and BaganatorRefreshButtonDB.gap and "manual" or "auto") .. ")")
 end
 
 SLASH_BAGANATORREFRESHTEST1 = "/bgrtest"
