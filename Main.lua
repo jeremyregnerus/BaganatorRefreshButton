@@ -1,16 +1,13 @@
--- BaganatorRefreshButton v0.1.0 - World of Warcraft: Forever
--- Manual in-place refresh for Baganator Categories view.
--- Does not close/reopen the window, sort inventory, or refresh on vendoring.
+-- Baganator Refresh Button 0.2.0 -- WoW Forever
+-- Adds a *manual* in-place Categories refresh without sorting or reopening bags.
 
-local ICON = "Interface\\AddOns\\BaganatorRefreshButton\\Assets\\Refresh"
-local installedFrames = setmetatable({}, { __mode = "k" })
+local ICON_PATH = "Interface\\AddOns\\BaganatorRefreshButton\\Assets\\Refresh"
 
--- These two global strings are read by Blizzard's Key Bindings UI.
+-- Blizzard reads these names for the standard AddOns keybindings menu.
 BINDING_HEADER_BAGANATOR_REFRESH_BUTTON = "Baganator Refresh Button"
 BINDING_NAME_BAGANATOR_REFRESH_BUTTON_REFRESH = "Refresh Baganator Categories"
 
--- This is the *exact* internal Baganator event that was tested successfully.
--- Flags 2 and 128 cause its category layout to be rebuilt in-place.
+-- Keep the proven working callback completely unchanged.
 function BaganatorRefreshButton_Refresh()
     local registry = Baganator and Baganator.CallbackRegistry
     if registry and type(registry.TriggerEvent) == "function" then
@@ -22,119 +19,169 @@ SLASH_BAGANATORREFRESHBUTTON1 = "/bgrrefresh"
 SLASH_BAGANATORREFRESHBUTTON2 = "/bgrr"
 SlashCmdList.BAGANATORREFRESHBUTTON = BaganatorRefreshButton_Refresh
 
-local function HasTag(details, sought)
-    if type(details.tags) ~= "table" then return false end
-    for _, tag in pairs(details.tags) do
-        if tag == sought then return true end
+local installed = setmetatable({}, { __mode = "k" }) -- [native sort] = refresh button
+local knownBackpackFrames = setmetatable({}, { __mode = "k" })
+local isCreating = false
+local discoveredSorts = 0
+
+local function HasTag(tags, desired)
+    if type(tags) ~= "table" then return false end
+    for key, value in pairs(tags) do
+        if value == desired or (key == desired and value == true) then
+            return true
+        end
     end
     return false
 end
 
--- Used after a Baganator header relayout. Baganator itself moves the Transfer
--- button when visiting a merchant, so put it to the left of our new button.
-local function PositionButton(bagFrame)
-    local button = installedFrames[bagFrame]
-    local sort = bagFrame and bagFrame.SortButton
-    if not button or not sort then return end
+local function FindBagFrame(sort)
+    local frame = sort
+    for _ = 1, 8 do
+        if not frame or not frame.GetParent then break end
+        -- BackpackView normally has these properties, including in older versions.
+        if (frame.BagSlots and frame.TransferButton)
+            or (frame.SortButton == sort and frame.TransferButton)
+            or knownBackpackFrames[frame] then
+            return frame
+        end
+        frame = frame:GetParent()
+    end
+    return nil
+end
 
-    button:ClearAllPoints()
-    button:SetPoint("RIGHT", sort, "LEFT", 0, 0)
-    button:SetShown(sort:IsShown())
+local function Reposition(sort)
+    local refresh = installed[sort]
+    if not refresh then return end
 
-    local transfer = bagFrame.TransferButton
-    if transfer and transfer:IsShown() then
+    refresh:ClearAllPoints()
+    refresh:SetPoint("RIGHT", sort, "LEFT", 0, 0)
+    refresh:SetShown(sort:IsShown())
+    if sort.GetAlpha then refresh:SetAlpha(sort:GetAlpha()) end
+
+    if not sort:IsShown() then return end
+
+    -- Baganator uses this slot for its transfer/vendor button when appropriate.
+    -- Find the actual backpack frame, rather than assuming its button hierarchy.
+    local bagFrame = FindBagFrame(sort)
+    local transfer = bagFrame and bagFrame.TransferButton
+    if transfer and transfer ~= refresh and transfer:IsShown() then
         transfer:ClearAllPoints()
-        transfer:SetPoint("RIGHT", button, "LEFT", 0, 0)
+        transfer:SetPoint("RIGHT", refresh, "LEFT", 0, 0)
     end
 end
 
-local function InstallButton(bagFrame)
-    if not bagFrame or installedFrames[bagFrame] or not bagFrame.SortButton then return end
-
-    local sort = bagFrame.SortButton
-
-    -- Reuse the exact button template as Baganator's Sort control, rather than
-    -- putting a mismatched Blizzard default button in the header.
-    local button = CreateFrame("Button", nil, bagFrame, "BaganatorSortButtonTemplate")
-    button:SetSize(sort:GetWidth(), sort:GetHeight())
-    button:SetFrameLevel(sort:GetFrameLevel())
-
-    -- The native Sort template provides the existing border, mouseover, and
-    -- pressed visuals. Change only its actual icon to a circular refresh arrow.
-    if button.Icon then
-        button.Icon:SetTexture(ICON)
+local function SetIcon(button)
+    if button.Icon and button.Icon.SetTexture then
+        button.Icon:SetTexture(ICON_PATH)
+        button.Icon:SetTexCoord(0, 1, 0, 1)
+        button.Icon:SetVertexColor(1, 1, 1, 1)
     else
-        -- Fallback for versions where the native template has no Icon key.
-        -- Cover any inherited icon texture with our own 16px glyph.
-        button.RefreshIcon = button:CreateTexture(nil, "OVERLAY", nil, 7)
-        button.RefreshIcon:SetTexture(ICON)
-        button.RefreshIcon:SetPoint("CENTER", button, "CENTER", 0, 0)
-        button.RefreshIcon:SetSize(17, 17)
+        -- Future-proof the icon path if Baganator renames its icon region.
+        local icon = button:CreateTexture(nil, "OVERLAY", nil, 7)
+        icon:SetTexture(ICON_PATH)
+        icon:SetPoint("CENTER", 0, 0)
+        icon:SetSize(17, 17)
+        button.RefreshButtonIcon = icon
     end
+end
 
-    button:SetScript("OnClick", BaganatorRefreshButton_Refresh)
+local function CreateRefreshButton(sort)
+    if not sort or installed[sort] or isCreating then return end
+    if not sort.GetParent or not sort:GetParent() then return end
+
+    isCreating = true
+    -- Use Baganator's actual Sort template for the same borders, skin and hover.
+    -- Use a plain button only if the internal template no longer exists.
+    local ok, button = pcall(CreateFrame, "Button", nil, sort:GetParent(), "BaganatorSortButtonTemplate")
+    if not ok or not button then
+        button = CreateFrame("Button", nil, sort:GetParent())
+        local bg = button:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        bg:SetColorTexture(0.13, 0.13, 0.13, 0.85)
+        local highlight = button:CreateTexture(nil, "HIGHLIGHT")
+        highlight:SetAllPoints()
+        highlight:SetColorTexture(1, 1, 1, 0.14)
+    end
+    isCreating = false
+
+    button.BaganatorRefreshCompanion = true
+    button:SetSize(math.max(sort:GetWidth(), 19), math.max(sort:GetHeight(), 19))
+    button:SetFrameStrata(sort:GetFrameStrata())
+    button:SetFrameLevel(sort:GetFrameLevel())
+    button:RegisterForClicks("LeftButtonUp")
+    SetIcon(button)
+
+    button:SetScript("OnClick", function() BaganatorRefreshButton_Refresh() end)
     button:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText("Refresh Categories")
-        GameTooltip:AddLine("Clear empty spaces and rebuild the visible category layout.", 1, 1, 1, true)
-        GameTooltip:AddLine("Does not move inventory items or close the bags.", 0.65, 0.82, 1, true)
+        GameTooltip:AddLine("Rebuilds the category layout without sorting or closing the bags.", 1, 1, 1, true)
         GameTooltip:Show()
     end)
     button:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    installedFrames[bagFrame] = button
+    installed[sort] = button
 
-    -- Retain compatibility with Baganator's Alt-to-show-header-buttons setting.
-    if type(bagFrame.AllButtons) == "table" then
-        table.insert(bagFrame.AllButtons, button)
-    end
-
-    sort:HookScript("OnShow", function() PositionButton(bagFrame) end)
+    sort:HookScript("OnShow", function() Reposition(sort) end)
     sort:HookScript("OnHide", function() button:Hide() end)
-    bagFrame:HookScript("OnShow", function() PositionButton(bagFrame) end)
 
-    -- Baganator relocates Transfer during its normal updates. Keep transfer
-    -- just to the left of our Refresh button, so nothing overlaps at vendors.
-    if type(bagFrame.UpdateTransferButton) == "function" then
-        hooksecurefunc(bagFrame, "UpdateTransferButton", function()
-            PositionButton(bagFrame)
-        end)
+    local bagFrame = FindBagFrame(sort)
+    if bagFrame then
+        bagFrame:HookScript("OnShow", function() Reposition(sort) end)
+        if type(bagFrame.UpdateTransferButton) == "function" then
+            hooksecurefunc(bagFrame, "UpdateTransferButton", function()
+                Reposition(sort)
+            end)
+        end
     end
-
-    PositionButton(bagFrame)
+    Reposition(sort)
 end
 
-local function OnSkinFrame(details)
-    if type(details) ~= "table" then return end
-    if details.regionType == "ButtonFrame" and HasTag(details, "backpack") then
-        InstallButton(details.region)
+local function SkinListener(details)
+    if isCreating or type(details) ~= "table" then return end
+    local region = details.region
+    if not region or region.BaganatorRefreshCompanion then return end
+
+    if details.regionType == "ButtonFrame" and HasTag(details.tags, "backpack") then
+        knownBackpackFrames[region] = true
+        if region.SortButton then CreateRefreshButton(region.SortButton) end
+    elseif details.regionType == "IconButton" and HasTag(details.tags, "sort") then
+        discoveredSorts = discoveredSorts + 1
+        -- In v868 and later, the Sort button may no longer be exposed as
+        -- backpackFrame.SortButton. Hook the button itself via its skin tag.
+        CreateRefreshButton(region)
     end
 end
 
-local initialized = false
+local listenerRegistered = false
 local function Initialize()
-    if initialized then return end
+    if listenerRegistered then return end
     local skins = Baganator and Baganator.API and Baganator.API.Skins
-    if not skins or type(skins.GetAllFrames) ~= "function"
-        or type(skins.RegisterListener) ~= "function" then
-        return
-    end
+    if not skins or type(skins.RegisterListener) ~= "function" then return end
+    listenerRegistered = true
 
-    initialized = true
-    skins.RegisterListener(OnSkinFrame)
-    for _, details in ipairs(skins.GetAllFrames()) do
-        OnSkinFrame(details)
+    skins.RegisterListener(SkinListener)
+    if type(skins.GetAllFrames) == "function" then
+        for _, details in ipairs(skins.GetAllFrames()) do
+            SkinListener(details)
+        end
     end
 end
 
-local loader = CreateFrame("Frame")
-loader:RegisterEvent("PLAYER_LOGIN")
-loader:SetScript("OnEvent", function()
-    -- Baganator builds frames on login; waiting one frame avoids load-order
-    -- differences between client versions without any permanent polling.
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0, Initialize)
-    else
-        Initialize()
-    end
+-- Diagnostic command in case Baganator changes its layout again.
+SLASH_BAGANATORREFRESHDEBUG1 = "/bgrdebug"
+SlashCmdList.BAGANATORREFRESHDEBUG = function()
+    local total = 0
+    for _ in pairs(installed) do total = total + 1 end
+    local registry = Baganator and Baganator.API and Baganator.API.Skins
+    print("|cff94D7FFBaganator Refresh Button|r v0.2.0: skin API " ..
+        (registry and "available" or "missing") .. ", sort events " ..
+        discoveredSorts .. ", refresh buttons " .. total)
+end
+
+local events = CreateFrame("Frame")
+events:RegisterEvent("PLAYER_LOGIN")
+events:SetScript("OnEvent", function()
+    Initialize()
+    if C_Timer and C_Timer.After then C_Timer.After(1, Initialize) end
 end)

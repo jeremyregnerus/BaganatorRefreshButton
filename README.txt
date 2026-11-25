@@ -1,38 +1,43 @@
-Baganator Refresh Button v0.1.0 -- WoW Forever
-================================================
+Baganator Refresh Button v0.2.0 -- WoW Forever
+==============================================
 
-Purpose
+CHANGES FROM 0.1.0
+------------------
+* Fixed keybindings declaration: Bindings.xml is automatically loaded by WoW.
+  It should NOT be listed in the .toc file; binding placed under AddOns.
+* Locate Baganator's real Sort button via the supported Skins IconButton
+  "sort" tag instead of assuming bagFrame.SortButton exists on version 868.
+* Keep existing working refresh logic exactly as before.
+* A troubleshooting command /bgrdebug reports detected Sort controls and
+  successfully attached Refresh buttons.
+
+INSTALL
 -------
-A manual in-place refresh for Baganator Categories view. Clicking the new
-header button or activating the keybinding triggers Baganator's confirmed
-working RefreshStateChange event with flags 2 and 128. It does not close
-or reopen your bags, actually sort items between slots, or refresh on sales.
+Replace the entire BaganatorRefreshButton addon folder with the included one:
+World of Warcraft/_forever_/Interface/AddOns/BaganatorRefreshButton/
 
-Installation
-------------
-1. Exit WoW.
-2. Extract this archive to:
-   World of Warcraft/_forever_/Interface/AddOns/
-3. Make sure you have the folder:
-   .../AddOns/BaganatorRefreshButton/
-   containing Main.lua, Bindings.xml, Assets/, and the .toc file.
-4. Launch the game and enable "Baganator Refresh Button" in AddOns.
-5. Open Baganator in Categories view. Look immediately LEFT of Sort.
+Exit WoW fully and restart it (not merely /reload) to pick up Bindings.xml.
+Look to the LEFT of Sort in your bag header, in Categories view.
 
-Keybinding
+KEYBINDING
 ----------
-Open Game Menu > Options > Keybindings and find the "Baganator Refresh
-Button" section. Bind "Refresh Baganator Categories" to any free key.
+Esc > Options > Keybindings > AddOns > Baganator Refresh Button.
+Assign any free key to "Refresh Baganator Categories".
 
-You can also use /bgrrefresh or /bgrr from chat.
+COMMANDS
+--------
+/bgrrefresh    Manually refresh Categories layout (bag remains open)
+/bgrr          Short alias of the same command
+/bgrdebug      Show skin registration and button-detection counts
 
-Compatibility / limitations
----------------------------
-- Intended for Baganator 868 on Forever 1.60.1.
-- Built against header/button interfaces documented in older public Baganator
-  source; the exact 868 client was NOT available for in-game testing.
-- The code uses Baganator's internal callback and skin frame registry, not
-  a guaranteed public API. Future Baganator releases may require changes.
-- If the button is absent but /bgrrefresh works, Baganator may have changed
-  its header structure. Check the companion code against your installed
-  Baganator files and send the relevant header files for an exact adjustment.
+IF THE BUTTON IS STILL ABSENT
+-----------------------------
+Run /bgrdebug in chat and report the three values. This reveals whether
+Baganator's current skin registry is supplying the Sort button to us.
+
+NOTE
+----
+The refresh callback is verified by the user on Baganator 868 / WoW Forever.
+Button and keybinding code has been revised using Baganator's documented
+skin-listener pattern, but cannot be tested in-game here. Future updates to
+Baganator's private button construction could require further changes.
