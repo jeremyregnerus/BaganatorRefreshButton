@@ -1,10 +1,11 @@
--- Baganator Refresh Button v0.6.0 -- WoW Forever
+-- Baganator Refresh Button v0.7.0 -- WoW Forever
 -- Manual in-place Categories view refresh.  No changes to inventory slots.
 
-local VERSION = "0.6.0"
-local ICON_PATH = "Interface\\AddOns\\BaganatorRefreshButton\\Assets\\Refresh.tga"
-local HOVER_PATH = "Interface\\AddOns\\BaganatorRefreshButton\\Assets\\RefreshHover.tga"
-local PUSHED_PATH = "Interface\\AddOns\\BaganatorRefreshButton\\Assets\\RefreshPushed.tga"
+local VERSION = "0.7.0"
+local ASSET_ROOT = "Interface\\AddOns\\BaganatorRefreshButton\\Assets\\"
+local GLYPH_PATH  = ASSET_ROOT .. "RefreshGlyph.tga"
+local PANEL_PATH  = ASSET_ROOT .. "RefreshPanel.tga"
+local BORDER_PATH = ASSET_ROOT .. "RefreshBorder.tga"
 
 BINDING_HEADER_BAGANATOR_REFRESH_BUTTON = "Baganator Refresh Button"
 BINDING_NAME_BAGANATOR_REFRESH_BUTTON_REFRESH = "Refresh Baganator Categories"
@@ -90,31 +91,102 @@ local function ChooseSort()
     return best
 end
 
+-- Build a nine-slice iron border around Baganator's exact button dimensions.
+-- The gray textured metal stays crisp on wide/short buttons; the gold arrow
+-- remains square and never stretches with the button.
+local borderParts = {}
+local panelTexture
+local glyphTexture
+local BORDER_COORDS = { 0, 24 / 128, 104 / 128, 1 }
+
+local function CreateBorderPiece(parent, column, row)
+    local texture = parent:CreateTexture(nil, "ARTWORK")
+    texture:SetTexture(BORDER_PATH)
+    texture:SetTexCoord(
+        BORDER_COORDS[column], BORDER_COORDS[column+1],
+        BORDER_COORDS[row], BORDER_COORDS[row+1]
+    )
+    borderParts[(row-1)*3+column] = texture
+    return texture
+end
+
+local function ApplyButtonDimensions(sort)
+    if not button or not sort then return false end
+    local width, height = sort:GetSize()
+    if not width or not height or width < 11 or height < 11 then return false end
+    if math.abs(width-button:GetWidth()) < 0.1 and math.abs(height-button:GetHeight()) < 0.1 then
+        return false
+    end
+    button:SetSize(width,height)
+    local cap = math.min(4.5,height/4,width/5)
+    local innerWidth = math.max(0,width-2*cap)
+    local innerHeight = math.max(0,height-2*cap)
+    local colSizes = {cap,innerWidth,cap}
+    local rowSizes = {cap,innerHeight,cap}
+    for r=1,3 do
+        for c=1,3 do
+            local tex = borderParts[(r-1)*3+c]
+            tex:ClearAllPoints()
+            tex:SetSize(colSizes[c],rowSizes[r])
+            local x = (c==1) and 0 or ((c==2) and cap or cap+innerWidth)
+            local y = (r==1) and 0 or ((r==2) and cap or cap+innerHeight)
+            tex:SetPoint("TOPLEFT",button,"TOPLEFT",x,-y)
+        end
+    end
+    -- Keep the icon proportional: shape is intentionally a circle even if
+    -- the surrounding header button is a rectangle.
+    local iconSize = math.max(9,math.min(height*0.73,width-6))
+    glyphTexture:SetSize(iconSize,iconSize)
+    return true
+end
+
 local function CreateButton()
     if button then return end
     button = CreateFrame("Button", "BaganatorRefreshCompanionButton", UIParent)
-    button:SetSize(24, 24)
-    button:SetFrameStrata("FULLSCREEN_DIALOG") -- Above Baganator's header; below tooltips.
+    button:SetSize(0,0) -- the next header update adopts native Sort dimensions
+    button:SetFrameStrata("FULLSCREEN_DIALOG")
     button:SetFrameLevel(100)
     button:RegisterForClicks("LeftButtonUp")
     button:EnableMouse(true)
     button:Hide()
 
-    -- Classic Baganator header theme: warm metal bevel, oxblood inset,
-    -- gold refresh glyph.  Normal, hover and pressed artwork share a silhouette.
-    -- These textures replace the debug border used in v0.5; this is purely visual.
-    button:SetNormalTexture(ICON_PATH)
-    button:GetNormalTexture():SetAllPoints(button)
-    button:SetHighlightTexture(HOVER_PATH)
-    button:GetHighlightTexture():SetAllPoints(button)
-    button:SetPushedTexture(PUSHED_PATH)
-    button:GetPushedTexture():SetAllPoints(button)
+    panelTexture = button:CreateTexture(nil,"BACKGROUND")
+    panelTexture:SetTexture(PANEL_PATH)
+    panelTexture:SetPoint("TOPLEFT",button,"TOPLEFT",3,-3)
+    panelTexture:SetPoint("BOTTOMRIGHT",button,"BOTTOMRIGHT",-3,3)
+
+    for r=1,3 do
+        for c=1,3 do
+            CreateBorderPiece(button,c,r)
+        end
+    end
+
+    glyphTexture = button:CreateTexture(nil,"OVERLAY")
+    glyphTexture:SetTexture(GLYPH_PATH)
+    glyphTexture:SetPoint("CENTER",button,"CENTER",0,0)
+
+    -- Native-looking hover/pressed feedback without recoloring the glyph.
+    local hover = button:CreateTexture(nil,"HIGHLIGHT")
+    hover:SetColorTexture(1,0.80,0.4,0.12)
+    hover:SetPoint("TOPLEFT",button,"TOPLEFT",4,-3)
+    hover:SetPoint("BOTTOMRIGHT",button,"BOTTOMRIGHT",-4,3)
+    button:SetScript("OnMouseDown", function(self)
+        if panelTexture then panelTexture:SetVertexColor(0.75,0.75,0.75) end
+        if glyphTexture then glyphTexture:SetPoint("CENTER",self,"CENTER",0,-1) end
+    end)
+    button:SetScript("OnMouseUp", function(self)
+        if panelTexture then panelTexture:SetVertexColor(1,1,1) end
+        if glyphTexture then glyphTexture:SetPoint("CENTER",self,"CENTER",0,0) end
+    end)
+    button:SetScript("OnHide", function(self)
+        if panelTexture then panelTexture:SetVertexColor(1,1,1) end
+    end)
 
     button:SetScript("OnClick", BaganatorRefreshButton_Refresh)
     button:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetOwner(self,"ANCHOR_RIGHT")
         GameTooltip:SetText("Refresh Categories")
-        GameTooltip:AddLine("Clear empty placeholders without closing bags or sorting items.", 1, 1, 1, true)
+        GameTooltip:AddLine("Clear empty placeholders without closing bags or sorting items.",1,1,1,true)
         GameTooltip:Show()
     end)
     button:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -195,6 +267,12 @@ local function UpdatePosition()
         button:Hide()
         anchorName = "none"
         return
+    end
+
+    -- Match the real Sort button, even if Baganator's skin or UI scale changes.
+    -- Re-anchor on a size change so bank Transfer fallback keeps its spacing.
+    if ApplyButtonDimensions(sort) then
+        lastAnchor = nil
     end
 
     -- Sort controls exist for both backpack and bank, but Refresh belongs
@@ -316,7 +394,7 @@ SlashCmdList.BAGANATORREFRESHDEBUG = function()
             tostring(button:IsShown()), tostring(button:IsVisible()),
             x and string.format("%.0f", x) or "nil", y and string.format("%.0f", y) or "nil",
             button:GetFrameStrata(), button:GetFrameLevel(), tostring(selectedSort ~= nil)))
-        print(string.format("  Anchor=%s; nearby header buttons=%d; bank fallback=%s", anchorName, nearbyCount, tostring(bankReserve)))
+        print(string.format("  Anchor=%s; nearby header buttons=%d; bank fallback=%s; size=%.1fx%.1f", anchorName, nearbyCount, tostring(bankReserve), button:GetWidth(), button:GetHeight()))
     else
         print("Refresh frame: not created (skin API not initialized)")
     end
