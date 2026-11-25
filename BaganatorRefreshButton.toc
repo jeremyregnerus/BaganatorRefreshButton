@@ -1,0 +1,9 @@
+## Interface: 16001
+## Title: Baganator |cFF94D7FFRefresh Button|r
+## Notes: Adds a manual in-place Categories refresh button and a keybinding to Baganator.
+## Author: Custom companion addon
+## Version: 0.1.0
+## Dependencies: Baganator
+
+Main.lua
+Bindings.xml

@@ -1,0 +1,5 @@
+<Bindings>
+    <Binding name="BAGANATOR_REFRESH_BUTTON_REFRESH" header="BAGANATOR_REFRESH_BUTTON">
+        BaganatorRefreshButton_Refresh()
+    </Binding>
+</Bindings>
