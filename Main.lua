@@ -1,12 +1,13 @@
--- Baganator Refresh Button 0.3.0 -- WoW Forever
--- Manual, in-place Categories refresh, with a clickable header icon.
+-- Baganator Refresh Button v0.4.0 -- WoW Forever
+-- Manual in-place Categories view refresh.  No changes to inventory slots.
 
-local ICON_PATH = "Interface\\AddOns\\BaganatorRefreshButton\\Assets\\Refresh"
+local VERSION = "0.4.0"
+local ICON_PATH = "Interface\\AddOns\\BaganatorRefreshButton\\Assets\\Refresh.tga"
 
 BINDING_HEADER_BAGANATOR_REFRESH_BUTTON = "Baganator Refresh Button"
 BINDING_NAME_BAGANATOR_REFRESH_BUTTON_REFRESH = "Refresh Baganator Categories"
 
--- Keep the refresh operation that has been confirmed to work in-game.
+-- This is the exact event/flags confirmed working by the user.
 function BaganatorRefreshButton_Refresh()
     local registry = Baganator and Baganator.CallbackRegistry
     if registry and type(registry.TriggerEvent) == "function" then
@@ -18,179 +19,208 @@ SLASH_BAGANATORREFRESHBUTTON1 = "/bgrrefresh"
 SLASH_BAGANATORREFRESHBUTTON2 = "/bgrr"
 SlashCmdList.BAGANATORREFRESHBUTTON = BaganatorRefreshButton_Refresh
 
--- A Baganator skin callback gives us its real Sort button.
-local buttons = setmetatable({}, { __mode = "k" })
-local backpackFrames = setmetatable({}, { __mode = "k" })
-local sortEvents = 0
-local listening = false
+local sorts = {}       -- Ordered list; v0.3 debug accidentally described only one of two.
+local sortSet = {}     -- Each actual Sort frame is listed only once.
+local button
+local selectedSort
+local testMode = false
+local initialized = false
 
 local function HasTag(tags, desired)
     if type(tags) ~= "table" then return false end
     for key, value in pairs(tags) do
-        if (key == desired and value == true) or value == desired then
-            return true
-        end
+        if value == desired or (key == desired and value == true) then return true end
     end
     return false
 end
 
-local function FindBackpack(sort)
-    local frame = sort
-    for _ = 1, 12 do
-        if not frame then return nil end
-        if backpackFrames[frame]
-            or (frame.TransferButton and frame.SortButton == sort)
-            or (frame.TransferButton and frame.BagSlots) then
-            return frame
+local function ParentInfo(frame)
+    local names = {}
+    local backpack = false
+    local current = frame
+    for i = 1, 16 do
+        if not current then break end
+        local name = (current.GetName and current:GetName()) or ""
+        if name == "" and current.GetDebugName then
+            name = current:GetDebugName() or ""
         end
-        if not frame.GetParent then return nil end
-        frame = frame:GetParent()
+        if name ~= "" then
+            if name:lower():find("backpack", 1, true) then backpack = true end
+            if i <= 5 then names[#names + 1] = name end
+        end
+        if not current.GetParent then break end
+        current = current:GetParent()
     end
-    return nil
+    return backpack, (#names > 0 and table.concat(names, " / ") or "unnamed")
 end
 
-local function UpdateEntry(sort, entry)
-    local button = entry.button
-    if not sort or not sort.IsVisible or not sort:IsVisible() then
-        button:Hide()
-        return
-    end
-
-    -- Unlike v0.2, this button belongs to UIParent rather than a possibly
-    -- clipped/faded header container. It is still positioned relative to Sort.
-    -- In particular, do NOT copy sort:GetAlpha(); some skins use alpha 0
-    -- on their underlying frames and draw the actual icon separately.
-    local w = math.max(18, math.min(26, sort:GetWidth() or 20))
-    local h = math.max(18, math.min(26, sort:GetHeight() or 20))
-    button:SetSize(w, h)
-    button:SetAlpha(1)
-    button:SetFrameStrata(sort:GetFrameStrata())
-    button:SetFrameLevel(sort:GetFrameLevel() + 15)
-    if not entry.anchored then
-        button:ClearAllPoints()
-        button:SetPoint("RIGHT", sort, "LEFT", 0, 0)
-        entry.anchored = true
-    end
-    button:Show()
-
-    -- Baganator positions Transfer immediately left of Sort at merchants.
-    -- Keep that button to the left of Refresh, even when Baganator moves it.
-    local backpack = entry.backpack or FindBackpack(sort)
-    entry.backpack = backpack
-    local transfer = backpack and backpack.TransferButton
-    if transfer and transfer.IsShown and transfer:IsShown() then
-        local _, currentRelative = transfer:GetPoint(1)
-        if currentRelative ~= button then
-            transfer:ClearAllPoints()
-            transfer:SetPoint("RIGHT", button, "LEFT", 0, 0)
-        end
-    end
+local function CandidateInfo(sort)
+    local w, h = UIParent:GetWidth(), UIParent:GetHeight()
+    local x, y = sort:GetCenter()
+    local visible = sort:IsVisible() and sort:GetEffectiveAlpha() > 0.05
+    local onScreen = x ~= nil and y ~= nil and w and h
+        and x >= 0 and x <= w and y >= 0 and y <= h
+    local backpack, parents = ParentInfo(sort)
+    return {x=x, y=y, visible=visible, onScreen=onScreen, backpack=backpack, parents=parents}
 end
 
-local function CreateRefreshButton(sort)
-    if not sort or buttons[sort] or not sort.IsObjectType or not sort:IsObjectType("Button") then
-        return
+local function ChooseSort()
+    local best, bestScore
+    local w = UIParent:GetWidth()
+    for _, sort in ipairs(sorts) do
+        local info = CandidateInfo(sort)
+        if info.visible and info.onScreen then
+            -- The backpack Sort is preferred to bank/other Sort controls.
+            -- When neither is named, favor the right-hand side inventory view.
+            local score = (info.backpack and 100 or 0) + ((info.x or 0) / (w > 0 and w or 1))
+            if not bestScore or score > bestScore then
+                best, bestScore = sort, score
+            end
+        end
     end
+    return best
+end
 
-    -- No borrowed template: v0.2's template/alpha could hide this control.
-    -- The artwork is a small neutral circular arrow to match Baganator's UI.
-    local button = CreateFrame("Button", nil, UIParent)
-    button.BaganatorRefreshCompanion = true
-    button:SetSize(20, 20)
-    button:SetAlpha(1)
-    button:EnableMouse(true)
+local function CreateButton()
+    if button then return end
+    button = CreateFrame("Button", "BaganatorRefreshCompanionButton", UIParent)
+    button:SetSize(24, 24)
+    button:SetFrameStrata("FULLSCREEN_DIALOG") -- Above Baganator's header; below tooltips.
+    button:SetFrameLevel(100)
     button:RegisterForClicks("LeftButtonUp")
+    button:EnableMouse(true)
+    button:Hide()
 
+    -- Visible border even if a custom texture fails to load.
     local bg = button:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints()
-    bg:SetColorTexture(0.10, 0.10, 0.10, 0.65)
+    bg:SetAllPoints(button)
+    bg:SetColorTexture(0.13, 0.13, 0.13, 0.95)
+    local function Edge(point1, point2, size, horizontal)
+        local t = button:CreateTexture(nil, "BORDER")
+        t:SetColorTexture(0.65, 0.65, 0.65, 0.95)
+        t:SetPoint(point1, button, point1)
+        t:SetPoint(point2, button, point2)
+        if horizontal then t:SetHeight(size) else t:SetWidth(size) end
+    end
+    Edge("TOPLEFT", "TOPRIGHT", 1, true)
+    Edge("BOTTOMLEFT", "BOTTOMRIGHT", 1, true)
+    Edge("TOPLEFT", "BOTTOMLEFT", 1, false)
+    Edge("TOPRIGHT", "BOTTOMRIGHT", 1, false)
 
-    local icon = button:CreateTexture(nil, "ARTWORK")
-    icon:SetTexture(ICON_PATH)
-    icon:SetPoint("CENTER", 0, 0)
-    icon:SetSize(19, 19)
-    icon:SetVertexColor(1, 1, 1, 1)
-    button.BGRIcon = icon
+    local artwork = button:CreateTexture(nil, "ARTWORK")
+    artwork:SetTexture(ICON_PATH)
+    artwork:SetPoint("CENTER", button, "CENTER", 0, 0)
+    artwork:SetSize(20, 20)
+    artwork:SetVertexColor(1, 1, 1, 1)
+    button.Icon = artwork
 
-    local highlight = button:CreateTexture(nil, "HIGHLIGHT")
-    highlight:SetAllPoints()
-    highlight:SetColorTexture(1, 1, 1, 0.20)
+    local hover = button:CreateTexture(nil, "HIGHLIGHT")
+    hover:SetAllPoints(button)
+    hover:SetColorTexture(1, 1, 1, 0.16)
 
     button:SetScript("OnClick", BaganatorRefreshButton_Refresh)
     button:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText("Refresh Categories")
-        GameTooltip:AddLine("Remove empty placeholders without closing the bags or sorting items.", 1, 1, 1, true)
+        GameTooltip:AddLine("Clear empty placeholders without closing bags or sorting items.", 1, 1, 1, true)
         GameTooltip:Show()
     end)
     button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+end
 
-    local entry = { button = button, backpack = FindBackpack(sort), anchored = false }
-    buttons[sort] = entry
+local function UpdatePosition()
+    if not button then return end
+    if testMode then
+        if selectedSort then selectedSort = nil end
+        button:ClearAllPoints()
+        button:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+        button:Show()
+        return
+    end
 
-    -- Changes to visibility and transfer positioning occur at various times
-    -- during Baganator's bag/merchant updates. Check every 0.15 seconds.
-    local elapsed = 0
-    button:SetScript("OnUpdate", function(_, dt)
-        elapsed = elapsed + dt
-        if elapsed >= 0.15 then
-            elapsed = 0
-            UpdateEntry(sort, entry)
-        end
-    end)
+    local sort = ChooseSort()
+    if not sort then
+        selectedSort = nil
+        button:Hide()
+        return
+    end
 
-    sort:HookScript("OnShow", function() UpdateEntry(sort, entry) end)
-    sort:HookScript("OnHide", function() button:Hide() end)
-    UpdateEntry(sort, entry)
+    if selectedSort ~= sort then
+        selectedSort = sort
+        button:ClearAllPoints()
+        -- Anchor to the real Sort control.  No coordinates/scaling guessed.
+        button:SetPoint("RIGHT", sort, "LEFT", -3, 0)
+    end
+    -- V0.3 was sometimes underneath the header's later-added regions.
+    -- Keep an independent strata/level instead of copying Sort's level.
+    button:SetFrameStrata("FULLSCREEN_DIALOG")
+    button:SetFrameLevel(100)
+    button:Show()
 end
 
 local function SkinListener(details)
     if type(details) ~= "table" then return end
-    local region = details.region
-    if not region or region.BaganatorRefreshCompanion then return end
-
-    if details.regionType == "ButtonFrame" and HasTag(details.tags, "backpack") then
-        backpackFrames[region] = true
-        if region.SortButton then CreateRefreshButton(region.SortButton) end
-    elseif details.regionType == "IconButton" and HasTag(details.tags, "sort") then
-        sortEvents = sortEvents + 1
-        CreateRefreshButton(region)
-    end
-end
-
-local function Initialize()
-    if listening then return end
-    local skins = Baganator and Baganator.API and Baganator.API.Skins
-    if not skins or type(skins.RegisterListener) ~= "function" then return end
-    listening = true
-    skins.RegisterListener(SkinListener)
-    if type(skins.GetAllFrames) == "function" then
-        for _, details in ipairs(skins.GetAllFrames()) do
-            SkinListener(details)
+    if details.regionType == "IconButton" and HasTag(details.tags, "sort") then
+        local sort = details.region
+        if sort and sort.IsObjectType and sort:IsObjectType("Button") and not sortSet[sort] then
+            sortSet[sort] = true
+            sorts[#sorts + 1] = sort
         end
     end
 end
 
+local function Initialize()
+    if initialized then return end
+    local api = Baganator and Baganator.API and Baganator.API.Skins
+    if not api or type(api.RegisterListener) ~= "function" then return end
+    initialized = true
+    CreateButton()
+    api.RegisterListener(SkinListener)
+    if type(api.GetAllFrames) == "function" then
+        for _, details in ipairs(api.GetAllFrames()) do SkinListener(details) end
+    end
+    local ticker = CreateFrame("Frame")
+    local elapsed = 0
+    ticker:SetScript("OnUpdate", function(_, delta)
+        elapsed = elapsed + delta
+        if elapsed > 0.20 then
+            elapsed = 0
+            UpdatePosition()
+        end
+    end)
+    UpdatePosition()
+end
+
 SLASH_BAGANATORREFRESHDEBUG1 = "/bgrdebug"
 SlashCmdList.BAGANATORREFRESHDEBUG = function()
-    local total = 0
-    local diagnostics = nil
-    for sort, entry in pairs(buttons) do
-        total = total + 1
-        local btn = entry.button
-        local x = btn.GetCenter and select(1, btn:GetCenter())
-        local y = btn.GetCenter and select(2, btn:GetCenter())
-        diagnostics = string.format(
-            "Sort shown=%s visible=%s alpha=%.2f; Refresh shown=%s visible=%s alpha=%.2f position=%s,%s; backpack=%s",
-            tostring(sort:IsShown()), tostring(sort:IsVisible()), sort:GetEffectiveAlpha(),
-            tostring(btn:IsShown()), tostring(btn:IsVisible()), btn:GetEffectiveAlpha(),
-            x and string.format("%.0f", x) or "nil",
-            y and string.format("%.0f", y) or "nil",
-            tostring(entry.backpack ~= nil)
-        )
+    print("|cff94D7FFBaganator Refresh Button|r v" .. VERSION .. ": " .. #sorts .. " sort candidates; UIParent " ..
+        string.format("%.0fx%.0f", UIParent:GetWidth(), UIParent:GetHeight()) .. "; testMode=" .. tostring(testMode))
+    for i, sort in ipairs(sorts) do
+        local info = CandidateInfo(sort)
+        print(string.format("Sort %d: visible=%s onscreen=%s backpack=%s center=%s,%s strata=%s level=%d", i,
+            tostring(info.visible), tostring(info.onScreen), tostring(info.backpack),
+            info.x and string.format("%.0f", info.x) or "nil",
+            info.y and string.format("%.0f", info.y) or "nil",
+            sort:GetFrameStrata(), sort:GetFrameLevel()))
+        print("  Parents: " .. info.parents)
     end
-    print("|cff94D7FFBaganator Refresh Button|r v0.3.0: sort events " .. sortEvents .. ", refresh buttons " .. total)
-    if diagnostics then print(diagnostics) end
+    if button then
+        local x, y = button:GetCenter()
+        print(string.format("Refresh: shown=%s visible=%s center=%s,%s strata=%s level=%d selected=%s", 
+            tostring(button:IsShown()), tostring(button:IsVisible()),
+            x and string.format("%.0f", x) or "nil", y and string.format("%.0f", y) or "nil",
+            button:GetFrameStrata(), button:GetFrameLevel(), tostring(selectedSort ~= nil)))
+    else
+        print("Refresh frame: not created (skin API not initialized)")
+    end
+end
+
+SLASH_BAGANATORREFRESHTEST1 = "/bgrtest"
+SlashCmdList.BAGANATORREFRESHTEST = function()
+    testMode = not testMode
+    selectedSort = nil
+    UpdatePosition()
+    print("|cff94D7FFBaganator Refresh Button|r: center-screen visibility test " .. (testMode and "ON" or "OFF"))
 end
 
 local loader = CreateFrame("Frame")
