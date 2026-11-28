@@ -1,14 +1,29 @@
--- Baganator Refresh Button v0.9.1 -- WoW Forever
+-- Baganator Refresh Button v0.9.2 -- WoW Forever
 -- Manual in-place Categories view refresh.  No changes to inventory slots.
 
-local VERSION = "0.9.1"
+local VERSION = "0.9.2"
 local GLYPH_PATH = "Interface\\AddOns\\BaganatorRefreshButton\\Assets\\RefreshGlyph.tga"
 
 BINDING_HEADER_BAGANATOR_REFRESH_BUTTON = "Baganator Refresh Button"
 BINDING_NAME_BAGANATOR_REFRESH_BUTTON_REFRESH = "Refresh"
 
--- This is the exact event/flags confirmed working by the user.
+-- Baganator 868's Recent category header handles left-click by calling
+-- addonTable.NewItems:ForceClearNewItemsForTimeout(). The addonTable namespace
+-- is private to Baganator, but the globally declared category-button mixin
+-- contains that exact OnClick handler. Invoke it with the same source/button
+-- as Baganator's own Recent header; don't modify saved variables or bag slots.
+local function ClearRecentItemsLikeHeaderClick()
+    local categoryMixin = BaganatorCategoryViewsCategoryButtonMixin
+    if categoryMixin and type(categoryMixin.OnClick) == "function" then
+        categoryMixin.OnClick({ source = "default_auto_recents" }, "LeftButton")
+    end
+end
+
+-- Both the button and the existing keybinding call this same function.
 function BaganatorRefreshButton_Refresh()
+    -- Do this first so Baganator can reclassify Recent items before the
+    -- existing category-sort/layout refresh removes empty placeholders.
+    ClearRecentItemsLikeHeaderClick()
     local registry = Baganator and Baganator.CallbackRegistry
     if registry and type(registry.TriggerEvent) == "function" then
         registry:TriggerEvent("RefreshStateChange", { [2] = true, [128] = true })
@@ -134,7 +149,7 @@ local function CreateButton()
     button:EnableMouse(true)
     button:Hide()
     button.tooltipHeader = "Refresh Categories"
-    button.tooltipText = "Clear empty placeholders without closing bags or sorting items."
+    button.tooltipText = "Clear Recent items and empty placeholders without closing or sorting your bags."
 
     glyphTexture = button:CreateTexture(nil, "OVERLAY", nil, 1)
     glyphTexture:SetTexture(GLYPH_PATH)
